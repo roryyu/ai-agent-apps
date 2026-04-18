@@ -1,65 +1,139 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useCallback, useRef, useEffect } from 'react';
+import ChatForm from '@/components/ChatForm';
+import ResultDisplay from '@/components/ResultDisplay';
+import Loading from '@/components/Loading';
+
+interface FormValues {
+  query: string;
+}
 
 export default function Home() {
+  const [sessionId, setSessionId] = useState<string>(`${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`);
+  const [result, setResult] = useState<string>('');
+  const [reasoningContent, setReasoningContent] = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleSubmit = useCallback(async (values: FormValues) => {
+    setLoading(true);
+    setError('');
+    setResult('');
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    try {
+      const userPrompt = values.query;
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-Id': sessionId,
+        },
+        body: JSON.stringify({
+          userPrompt,
+          formData: {},
+          sessionId,
+        }),
+        signal: abortController.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error('请求失败');
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('无法读取响应流');
+      }
+
+      const decoder = new TextDecoder();
+      let accumulatedContent = '';
+      let reasoningAccumulatedContent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') {
+              continue;
+            }
+            try {
+              const parsed = JSON.parse(data);
+              if(parsed.reasoning_content){
+                reasoningAccumulatedContent += parsed.reasoning_content;
+                setReasoningContent(reasoningAccumulatedContent);
+              }
+              if (parsed.content) {
+                accumulatedContent += parsed.content;
+                setResult(accumulatedContent);
+              }
+            } catch (e) {
+              console.error('Failed to parse SSE data:', e);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        const errorMessage = err instanceof Error ? err.message : '发生未知错误';
+        setError(errorMessage);
+      }
+    } finally {
+      setLoading(false);
+      abortControllerRef.current = null;
+    }
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    setError('');
+    setResult('');
+  }, []);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div className="app-container">
+      <div className="scan-line"></div>
+      <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+        <header className="app-header">
+          <h1 className="app-title">
+            AI<span>_</span>ASSISTANT
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+          <p className="app-subtitle">SYSTEM ONLINE • V1.0</p>
+        </header>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+          <ChatForm onSubmit={handleSubmit} loading={loading} />
+
+          {loading && !result && <div><Loading /><textarea readOnly>{reasoningContent}</textarea></div>}         
+          <ResultDisplay
+            content={result}
+            error={error}
+            onRetry={error ? undefined : (result ? handleRetry : undefined)}
+          />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div style={{
+          marginTop: '32px',
+          textAlign: 'center',
+          color: 'var(--text-secondary)',
+          fontSize: '10px',
+          fontFamily: 'var(--mono-font)',
+          textTransform: 'uppercase',
+          letterSpacing: '2px'
+        }}>
+          © 2026 • NEURAL INTERFACE
         </div>
-      </main>
+      </div>
     </div>
   );
 }
