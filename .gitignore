@@ -77,3 +77,5 @@ next-env.d.ts
 .vscode/
 *.swp
 *.swo
+
+.claude/
