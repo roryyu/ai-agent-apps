@@ -81,3 +81,4 @@ next-env.d.ts
 .claude/
 CLAUDE.md
 AGENT.md
+db.json
