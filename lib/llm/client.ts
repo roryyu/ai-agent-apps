@@ -34,10 +34,10 @@ export class AnthropicClient extends LLMClient {
   }
 
   async chat(messages: Message[]): Promise<LLMResponse> {
-    const systemMessage = messages.find(m => m.role === 'system');
+    const systemMessage = messages.find((m) => m.role === 'system');
     const chatMessages = messages
-      .filter(m => m.role !== 'system')
-      .map(m => ({
+      .filter((m) => m.role !== 'system')
+      .map((m) => ({
         role: m.role as 'user' | 'assistant',
         content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
       }));
@@ -86,12 +86,15 @@ export class OpenAIClient extends LLMClient {
   }
 
   async chat(messages: Message[]): Promise<LLMResponse> {
-    const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = messages.map(m => {
+    const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = messages.map((m) => {
       const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
       return {
         role: m.role as 'system' | 'user' | 'assistant',
         content,
-      } as OpenAI.Chat.ChatCompletionSystemMessageParam | OpenAI.Chat.ChatCompletionUserMessageParam | OpenAI.Chat.ChatCompletionAssistantMessageParam;
+      } as
+        | OpenAI.Chat.ChatCompletionSystemMessageParam
+        | OpenAI.Chat.ChatCompletionUserMessageParam
+        | OpenAI.Chat.ChatCompletionAssistantMessageParam;
     });
 
     const response = await this.client.chat.completions.create({
@@ -100,14 +103,14 @@ export class OpenAIClient extends LLMClient {
     });
 
     const choice = response.choices[0];
-    const message = choice.message;
+    const message = choice?.message;
 
     const inputTokens = response.usage?.prompt_tokens || 0;
     const outputTokens = response.usage?.completion_tokens || 0;
     tokenCounter.add(inputTokens, outputTokens);
 
     return {
-      content: message.content || '',
+      content: message?.content || '',
       usage: {
         inputTokens,
         outputTokens,
