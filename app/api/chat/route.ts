@@ -13,27 +13,37 @@ interface Message {
 
 const ALLOWED_SOUL_FILES = new Set(['soul.md', 'entrepreneurship.md', 'treehole.md']);
 
-async function getSystemPrompt(type?: string): Promise<string> {
+const DEFAULT_PROMPT = '你是一个有用的助手。请根据用户提供的信息给出详细、有帮助的回答。';
+
+async function readSoulFile(filename: string): Promise<string | null> {
   try {
-    let md = 'soul.md';
-    if (type === 'entrepreneurship') {
-      md = 'entrepreneurship.md';
-    }
-    if (type === 'treehole') {
-      md = 'treehole.md';
-    }
-
-    if (!ALLOWED_SOUL_FILES.has(md)) {
-      return '你是一个有用的助手。请根据用户提供的信息给出详细、有帮助的回答。';
-    }
-
-    const soulPath = path.join(process.cwd(), 'soul', md);
-    const content = await fs.readFile(soulPath, 'utf-8');
-    return content.trim();
-  } catch (error) {
-    console.error('Failed to read soul file:', error);
-    return '你是一个有用的助手。请根据用户提供的信息给出详细、有帮助的回答。';
+    const filePath = path.join(process.cwd(), 'soul', filename);
+    return (await fs.readFile(filePath, 'utf-8')).trim();
+  } catch {
+    return null;
   }
+}
+
+async function getSystemPrompt(type?: string): Promise<string> {
+  let personaFile = 'soul.md';
+  if (type === 'entrepreneurship') {
+    personaFile = 'entrepreneurship.md';
+  }
+  if (type === 'treehole') {
+    personaFile = 'treehole.md';
+  }
+
+  if (!ALLOWED_SOUL_FILES.has(personaFile)) {
+    return DEFAULT_PROMPT;
+  }
+
+  const [base, persona] = await Promise.all([readSoulFile('_base.md'), readSoulFile(personaFile)]);
+
+  if (!persona) {
+    return DEFAULT_PROMPT;
+  }
+
+  return base ? `${base}\n\n${persona}` : persona;
 }
 
 export async function POST(request: Request) {

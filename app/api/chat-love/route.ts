@@ -52,15 +52,25 @@ interface Message {
   content: string | Record<string, unknown>;
 }
 
-async function getSystemPrompt(): Promise<string> {
+const LOVE_FALLBACK_PROMPT = '你是一个恋爱顾问。请根据用户提供的信息给出温暖、有帮助的恋爱建议。';
+
+async function readSoulFile(filename: string): Promise<string | null> {
   try {
-    const soulPath = path.join(process.cwd(), 'soul', 'love.md');
-    const content = await fs.readFile(soulPath, 'utf-8');
-    return content.trim();
-  } catch (error) {
-    console.error('Failed to read love.md:', error);
-    return '你是一个恋爱顾问。请根据用户提供的信息给出温暖、有帮助的恋爱建议。';
+    const filePath = path.join(process.cwd(), 'soul', filename);
+    return (await fs.readFile(filePath, 'utf-8')).trim();
+  } catch {
+    return null;
   }
+}
+
+async function getSystemPrompt(): Promise<string> {
+  const [base, persona] = await Promise.all([readSoulFile('_base.md'), readSoulFile('love.md')]);
+
+  if (!persona) {
+    return LOVE_FALLBACK_PROMPT;
+  }
+
+  return base ? `${base}\n\n${persona}` : persona;
 }
 
 async function save(selfDesc: string, partnerDesc: string): Promise<string> {
